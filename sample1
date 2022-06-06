@@ -1,0 +1,136 @@
+#==================================================
+# 準備
+#==================================================
+# インポート
+CV2 をインポートする
+NP としてnumpy をインポートします
+オープンヴィーノから。inference_engine import IENetwork, IEPlugin
+数学のインポート
+ pngoverlay からインポート PNGOverlay
+
+# ターゲットデバイスの指定
+plugin = IEPlugin(device='MYRIAD')
+
+# モデルの読み込みと入出力データのキー取得（顔検出）
+net_face = IENetwork(model='intel/face-detection-retail-0005/FP16/face-detection-retail-0005.xml', weights='intel/face-detection-retail-0005/FP16/face-detection-retail-0005.bin)
+exec_net_face = プラグイン。ロード(ネットワーク=net_face)
+input_blob_face = next(iter(net_face.入力))
+out_blob_face = 次へ(iter(net_face.出力))
+
+# モデルの読み込みと入出力データのキー取得(ランドマーク)
+net_landmarks = IENetwork(model='intel/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009.xml', weights='intel/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009.bin)
+exec_net_landmarks = プラグイン。ロード(ネットワーク=net_landmarks)
+input_blob_landmarks = next(iter(net_landmarks.入力))
+out_blob_landmarks = next(iter(net_landmarks.出力))
+
+# カメラ準備
+キャップ = cv2。ビデオキャプチャ(0)
+
+# PNGOverlayインスタンス生成
+item = PNGOverlay('image/6629_trim_small.png')
+
+# アイポイント情報(6629_trim_small.png)
+EPL_x = 137
+EPL_y = 237
+EPR_x = 381
+EPR_y = 237
+
+# アイポイント距離
+EP_distance=  数学。sqrt((EPR_x - EPL_x) ** 2 + (EPR_y - EPL_y) **  2 )
+
+#==================================================
+# メインループ
+#==================================================
+一方、真:
+    # キー押下で終了
+    キー = cv2。ウェイトキー(1)
+    キー != -1 の場合:
+        壊す
+
+    # カメラ画像読み込み
+    ret、フレーム=キャップ。読む()
+
+    # 入力データフォーマットへ変換
+    img = cv2.サイズ変更(フレーム, (300, 300)) # 高さと幅の変更
+    img = img.転置((2, 0, 1)) # HWC > CHW
+    img = np.expand_dims(img, axis=0)   # CHW > BCHW
+
+    # 推論実行
+    out = exec_net_face。infer(inputs={input_blob_face: img})
+
+    # 出力から必要なデータのみ取り出し
+     out = out[out_blob_face]
+
+    # 不要な次元を削減
+    out = np.スクイーズ(アウト))
+
+    # 検出されたすべての顔領域に対して１つずつ処理
+    アウトで検出する場合:
+        # conf値の取得
+        信頼度 = 浮動小数点数(検出[2]])
+
+        # バウンディングボックス座標を入力画像のスケールに変換
+        xmin = int(detection[3] * frame.形状[1]])
+        ymin = int(detection[4] * frame.形状[0]])
+        xmax = int(detection[5] * frame.形状[1]])
+        ymax = int(detection[6] * frame.形状[0]])
+
+        # conf値が0.5より大きい場合のみLandmarks推論とバウンディングボックス表示
+        信頼度が 0.5 >場合:
+           # 顔検出領域はカメラ範囲内に補正する。特にminは補正しないとエラーになる
+            xmin が 0 <場合:
+                xmin = 0
+            yminが0<場合:
+                ymin = 0
+            xmaxがフレーム>場合。形状[1]:
+                xmax = フレーム。形状[1]]
+            ymaxがフレーム>場合。形状[0]:
+                ymax = フレーム。形状[0]]
+
+            #--------------------------------------------------
+            # ディープラーニングランドマーク推定
+            #--------------------------------------------------
+            # 顔領域のみ切り出し
+            img_face = フレーム[ ymin:ymax, xmin:xmax ]
+
+            # 入力データフォーマットへ変換
+            img = cv2.サイズ変更(img_face, (48, 48)) # 高さと幅変更
+            img = img.転置((2, 0, 1)) # HWC > CHW
+            img = np.expand_dims(img, axis=0)    # CHW > BCHW
+
+            # 推論実行
+            out = exec_net_landmarks。infer(inputs={input_blob_landmarks: img})
+
+            # 出力から必要なデータのみ取り出し
+             out = out[out_blob_landmarks]
+
+            # 不要な次元を削減
+            out = np.スクイーズ(アウト))
+
+            # 目の座標を顔画像のスケールに変換し、オフセット考慮
+            eye_left_x = int(out[0] * img_face.形状[1]) + xmin
+            eye_left_y = int(out[1] * img_face.形状[0]) + ymin
+            eye_right_x = int(out[2] * img_face.形状[1]) + xmin
+            eye_right_y = int(out[3] * img_face.形状[0]) + ymin
+
+            #--------------------------------------------------
+            # スケール対応
+            #--------------------------------------------------
+            # 目の距離
+            eye_distance = 数学。sqrt((eye_right_x - eye_left_x) ** 2 + (eye_right_y - eye_left_y) **  2 )
+
+            # アイテムのスケール
+            item_scale =  eye_distance / EP_distance
+
+            # アイテム描画
+            アイテム。サイズ変更(item_scale) # スケール
+            アイテム。show(frame, 300, 100) # 仮の座標 
+
+    # 画像表示
+    cv2.imshow('frame', frame)
+
+#==================================================
+# 終了処理
+#==================================================
+キャップ。解放()
+cv2.破棄オールウィンドウズ()
